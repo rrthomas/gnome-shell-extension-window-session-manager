@@ -11,6 +11,10 @@ const Gio = imports.gi.Gio;
 const Util = imports.misc.util;
 
 const Me = imports.misc.extensionUtils.getCurrentExtension();
+const _ = imports.gettext.gettext;
+const System = Main.panel.statusArea.aggregateMenu._system;
+const GnomeSession = imports.misc.gnomeSession;
+const LOGOUT_MODE_NORMAL = 0;
 const Lib = Me.imports.lib;
 const Gsettings = Lib.getSettings();
 
@@ -83,6 +87,16 @@ const WindowSessionIndicator = new Lang.Class({
     this.actor.add_actor(topBox);
     topBox.add_style_class_name('window-session-indicator');
 
+    // Add logout button
+    this._logoutButton = System._createActionButton('application-exit-symbolic', _("Log Out"));
+    this._logoutButton.connect('button-press-event', Lang.bind(this, this._logout));
+    if (System._actionsItem === undefined) { // GNOME >= 3.33
+      System.buttonGroup.add(this._logoutButton, { expand: true, x_fill: false });
+    } else if (System._session === undefined) { // GNOME >=3.26
+      System._actionsItem.actor.add_child(this._logoutButton);
+    } else {
+      System._actionsItem.actor.add_child(this._logoutButton, { expand: true, x_fill: false });
+    }
   },
 
   _createMenu: function() {
@@ -310,7 +324,31 @@ const WindowSessionIndicator = new Lang.Class({
     }
     this._timeout = undefined;
     this.menu.removeAll();
+
+    // Disable logout button
+    if (System._actionsItem === undefined) { // GNOME >= 3.33
+      System.buttonGroup.remove_child(this._logoutButton);
+    } else {
+      System._actionsItem.actor.remove_child(this._logoutButton);
+    }
   },
+
+  // Initiates a log out when the log out button is clicked
+  _logout: function() {
+    System.menu.itemActivated();
+    Main.overview.hide();
+
+    // Save default session
+    this._saveSession('DEFAULT', function () {
+      if (System._session === undefined) { // GNOME >=3.26
+        var sessionManager = new GnomeSession.SessionManager();
+        sessionManager.LogoutRemote(LOGOUT_MODE_NORMAL);
+      } else {
+        System._session.LogoutRemote(0);
+      }
+    });
+  },
+
 });
 
 let wsMenu;
